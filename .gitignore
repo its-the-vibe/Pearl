@@ -27,6 +27,15 @@ go.work.sum
 # env file
 .env
 
+# Application config (use config.example.yaml as a template)
+config.yaml
+
+# GCP credentials
+credentials.json
+
+# Build output
+pearl
+
 # Editor/IDE
 # .idea/
 # .vscode/

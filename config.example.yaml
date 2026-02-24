@@ -1,0 +1,14 @@
+# Pearl – Example Configuration
+# Copy this file to config.yaml and fill in your values.
+# Do NOT commit config.yaml to source control.
+
+server:
+  # Port the HTTP server listens on.
+  port: 8080
+
+bigquery:
+  # GCP project ID that owns the BigQuery dataset.
+  project_id: "your-gcp-project-id"
+
+  # BigQuery dataset that contains the journeys table.
+  dataset: "your_dataset"
