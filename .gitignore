@@ -34,7 +34,7 @@ config.yaml
 credentials.json
 
 # Build output
-pearl
+/pearl
 
 # Editor/IDE
 # .idea/
