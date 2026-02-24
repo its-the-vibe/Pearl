@@ -1,0 +1,8 @@
+services:
+  pearl:
+    build: .
+    image: pearl:latest
+    read_only: true
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+    command: ["-config", "/config.yaml"]
