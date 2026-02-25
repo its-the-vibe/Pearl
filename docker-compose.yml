@@ -10,9 +10,9 @@ services:
       # Mount your GCP service account credentials or use workload identity.
       # - ./credentials.json:/credentials.json:ro
       - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials.json}:/credentials.json:ro
-    #environment:
+    environment:
       # If using a service account key file, set this path inside the container.
-      # GOOGLE_APPLICATION_CREDENTIALS: /credentials.json
+      GOOGLE_APPLICATION_CREDENTIALS: /credentials.json
       # GOOGLE_APPLICATION_CREDENTIALS: ""
     command: ["/pearl", "-config", "/config.yaml"]
     restart: on-failure:10
