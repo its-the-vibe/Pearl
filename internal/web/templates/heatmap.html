@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pearl – Oyster Activity</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            padding: 2rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            font-size: 0.875rem;
+            margin-bottom: 2rem;
+        }
+
+        .heatmap-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1.5rem;
+            display: inline-block;
+        }
+
+        .heatmap-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #8b949e;
+            margin-bottom: 1rem;
+        }
+
+        .heatmap-graph {
+            display: flex;
+            gap: 0.25rem;
+            align-items: flex-start;
+        }
+
+        .day-labels {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin-right: 0.25rem;
+            padding-top: 1.25rem;
+        }
+
+        .day-label {
+            font-size: 0.625rem;
+            color: #8b949e;
+            height: 11px;
+            line-height: 11px;
+            margin-bottom: 2px;
+        }
+
+        .weeks {
+            display: flex;
+            gap: 2px;
+        }
+
+        .week {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .month-labels {
+            display: flex;
+            margin-bottom: 2px;
+        }
+
+        .month-label {
+            font-size: 0.625rem;
+            color: #8b949e;
+        }
+
+        .cell {
+            width: 11px;
+            height: 11px;
+            border-radius: 2px;
+            background: #161b22;
+        }
+
+        .cell-empty {
+            background: transparent;
+        }
+
+        /* Activity intensity levels */
+        .level-0 { background: #21262d; }
+        .level-1 { background: #0e4429; }
+        .level-2 { background: #006d32; }
+        .level-3 { background: #26a641; }
+        .level-4 { background: #39d353; }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .legend-label {
+            font-size: 0.625rem;
+            color: #8b949e;
+        }
+
+        .legend-cell {
+            width: 11px;
+            height: 11px;
+            border-radius: 2px;
+        }
+
+        .stats {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 2rem;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .cell:hover {
+            outline: 1px solid rgba(255,255,255,0.3);
+            cursor: default;
+        }
+
+        .no-data {
+            color: #8b949e;
+            font-size: 0.875rem;
+            padding: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚇 Pearl</h1>
+    <p class="subtitle">Mind the data gap. A deep-dive analytics dashboard for your London Oyster activity.</p>
+
+    <div class="heatmap-container">
+        <div class="heatmap-title">Journey activity in the last year</div>
+        {{if .Weeks}}
+        <div class="heatmap-graph">
+            <div class="day-labels">
+                <div class="day-label"></div>
+                <div class="day-label">Mon</div>
+                <div class="day-label"></div>
+                <div class="day-label">Wed</div>
+                <div class="day-label"></div>
+                <div class="day-label">Fri</div>
+                <div class="day-label"></div>
+            </div>
+            <div>
+                <div class="month-labels">
+                    {{range .MonthLabels}}
+                    <div class="month-label" style="width: {{.Width}}px; margin-left: {{.Offset}}px;">{{.Name}}</div>
+                    {{end}}
+                </div>
+                <div class="weeks">
+                    {{range .Weeks}}
+                    <div class="week">
+                        {{range .}}
+                        {{if .Empty}}
+                        <div class="cell cell-empty"></div>
+                        {{else}}
+                        <div class="cell level-{{.Level}}" title="{{.Label}}"></div>
+                        {{end}}
+                        {{end}}
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        <div class="legend">
+            <span class="legend-label">Less</span>
+            <div class="legend-cell level-0"></div>
+            <div class="legend-cell level-1"></div>
+            <div class="legend-cell level-2"></div>
+            <div class="legend-cell level-3"></div>
+            <div class="legend-cell level-4"></div>
+            <span class="legend-label">More</span>
+        </div>
+        {{else}}
+        <div class="no-data">No journey data available yet.</div>
+        {{end}}
+    </div>
+
+    {{if .Weeks}}
+    <div class="stats">
+        <div class="stat">
+            <span class="stat-value">{{.TotalJourneys}}</span>
+            <span class="stat-label">Journeys in the last year</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">{{.ActiveDays}}</span>
+            <span class="stat-label">Active days</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">{{.BusiestDay}}</span>
+            <span class="stat-label">Busiest day</span>
+        </div>
+    </div>
+    {{end}}
+</body>
+</html>
