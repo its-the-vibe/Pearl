@@ -185,24 +185,34 @@ func buildMonthLabels(startSunday time.Time, numWeeks int) []MonthLabel {
 
 	var labels []MonthLabel
 	prevMonth := -1
+	var prevAbsOffset int
 	for w := 0; w < numWeeks; w++ {
 		day := startSunday.AddDate(0, 0, w*7)
 		m := int(day.Month())
 		if m != prevMonth {
+			absOffset := w * cellWidth
+			// Offset is used as CSS margin-left inside a flex container, so only
+			// the first label needs an absolute offset; subsequent labels sit
+			// immediately after the previous one and need no extra margin.
+			offset := 0
+			if len(labels) == 0 {
+				offset = absOffset
+			}
 			labels = append(labels, MonthLabel{
 				Name:   day.Format("Jan"),
-				Offset: w * cellWidth,
+				Offset: offset,
 			})
 			if len(labels) > 1 {
 				prev := &labels[len(labels)-2]
-				prev.Width = w*cellWidth - prev.Offset
+				prev.Width = absOffset - prevAbsOffset
 			}
+			prevAbsOffset = absOffset
 			prevMonth = m
 		}
 	}
 	if len(labels) > 0 {
 		last := &labels[len(labels)-1]
-		last.Width = numWeeks*cellWidth - last.Offset
+		last.Width = numWeeks*cellWidth - prevAbsOffset
 	}
 	return labels
 }
