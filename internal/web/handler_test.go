@@ -48,6 +48,50 @@ func TestBuildHeatmapData_WithCounts(t *testing.T) {
 	}
 }
 
+func TestBuildMonthLabels_OffsetAndWidth(t *testing.T) {
+	// Use a fixed Sunday that is guaranteed to start in one month and span
+	// into the next so we get at least two distinct month labels.
+	// 2024-01-07 is a Sunday in January 2024.
+	start := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
+	const numWeeks = 10
+	const cellWidth = 13
+
+	labels := buildMonthLabels(start, numWeeks)
+	if len(labels) < 2 {
+		t.Fatalf("expected at least 2 month labels, got %d", len(labels))
+	}
+
+	// The first label should have a non-negative offset (its absolute position).
+	if labels[0].Offset < 0 {
+		t.Errorf("first label Offset should be >= 0, got %d", labels[0].Offset)
+	}
+
+	// All labels after the first must have Offset == 0 because they sit
+	// immediately after the previous label in the flex container.
+	for i := 1; i < len(labels); i++ {
+		if labels[i].Offset != 0 {
+			t.Errorf("label[%d] (%s) Offset = %d, want 0", i, labels[i].Name, labels[i].Offset)
+		}
+	}
+
+	// The sum of all widths plus the first label's offset should equal the
+	// total grid width (numWeeks * cellWidth).
+	totalWidth := labels[0].Offset
+	for _, l := range labels {
+		totalWidth += l.Width
+	}
+	if totalWidth != numWeeks*cellWidth {
+		t.Errorf("total width = %d, want %d", totalWidth, numWeeks*cellWidth)
+	}
+
+	// Every individual label width must be positive.
+	for i, l := range labels {
+		if l.Width <= 0 {
+			t.Errorf("label[%d] (%s) Width = %d, want > 0", i, l.Name, l.Width)
+		}
+	}
+}
+
 func TestIntensityLevel(t *testing.T) {
 	tests := []struct {
 		count, max int
