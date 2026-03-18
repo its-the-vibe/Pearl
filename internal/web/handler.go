@@ -37,6 +37,40 @@ type HeatmapData struct {
 	BusiestDay    string
 }
 
+// TimeLabel positions a time label on the Y-axis of the commute chart.
+type TimeLabel struct {
+	Y     int
+	Label string
+}
+
+// CommutePoint represents a single commute journey rendered in the SVG chart.
+type CommutePoint struct {
+	Date        string // e.g. "Tue 05 Mar" – used as x-axis label
+	Start       string // e.g. "07:45" – used in tooltip
+	End         string // e.g. "09:15" – used in tooltip
+	Duration    string // e.g. "1h 30m" – used in tooltip
+	X           int    // center x of bar in SVG
+	BarX        int    // left edge of bar rect
+	BarY        int    // top y of bar rect (= start time position)
+	BarHeight   int    // height of bar rect
+	BarBottomY  int    // BarY + BarHeight (= end time position)
+}
+
+// CommuteData is passed to the commutes template.
+type CommuteData struct {
+	Commutes       []CommutePoint
+	TimeLabels     []TimeLabel
+	TotalCommutes  int
+	AvgDuration    string
+	LongestCommute string
+	SVGWidth       int
+	SVGHeight      int
+	ChartLeft      int // x of y-axis / left edge of plot area
+	ChartTop       int // y of top of plot area
+	ChartBottom    int // y of bottom of plot area (x-axis line)
+	LabelY         int // y for x-axis text labels
+}
+
 // Handler holds the dependencies for HTTP handlers.
 type Handler struct {
 	bqClient *bq.Client
@@ -55,6 +89,7 @@ func NewHandler(client *bq.Client) (*Handler, error) {
 // RegisterRoutes registers all HTTP routes on the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", h.handleHeatmap)
+	mux.HandleFunc("/commutes", h.handleCommutes)
 	mux.HandleFunc("/health", h.handleHealth)
 }
 
@@ -81,6 +116,22 @@ func (h *Handler) handleHeatmap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, "heatmap.html", data); err != nil {
 		slog.Error("rendering template", "error", err)
+	}
+}
+
+func (h *Handler) handleCommutes(w http.ResponseWriter, r *http.Request) {
+	journeys, err := h.bqClient.CommuteJourneys(r.Context())
+	if err != nil {
+		slog.Error("querying bigquery for commutes", "error", err)
+		http.Error(w, "failed to load commute data", http.StatusInternalServerError)
+		return
+	}
+
+	data := buildCommuteData(journeys)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.tmpl.ExecuteTemplate(w, "commutes.html", data); err != nil {
+		slog.Error("rendering commutes template", "error", err)
 	}
 }
 
@@ -215,4 +266,174 @@ func buildMonthLabels(startSunday time.Time, numWeeks int) []MonthLabel {
 		last.Width = numWeeks*cellWidth - prevAbsOffset
 	}
 	return labels
+}
+
+// SVG chart layout constants for the commute chart.
+const (
+	svgPaddingLeft   = 60
+	svgPaddingRight  = 30
+	svgPaddingTop    = 20
+	svgPaddingBottom = 60
+	svgPlotHeight    = 250
+	svgBarStep       = 50 // horizontal distance between bar centres
+	svgBarHalfWidth  = 8  // half the width of each range bar
+
+	// Commute time window – 7:00 to 10:30.
+	svgMinMinutes   = 7*60 + 0
+	svgMaxMinutes   = 10*60 + 30
+	svgMinutesRange = svgMaxMinutes - svgMinMinutes // 210
+	svgChartHeight  = svgPaddingTop + svgPlotHeight + svgPaddingBottom
+)
+
+// commuteMinWindowMinutes and commuteMaxWindowMinutes define the start-time
+// window used to decide whether a journey qualifies as a commute.
+const (
+	commuteMinWindowMinutes = svgMinMinutes
+	commuteMaxWindowMinutes = svgMaxMinutes
+)
+
+// minutesToSVGY maps a time (in minutes from midnight) to a Y coordinate in
+// the SVG chart. Earlier times appear at the top (smaller Y).
+func minutesToSVGY(minutes int) int {
+	return svgPaddingTop + (minutes-svgMinMinutes)*svgPlotHeight/svgMinutesRange
+}
+
+// buildCommuteData filters journeys to commute candidates (Tue/Wed/Thu,
+// 7:00–10:30 start time) and computes all values needed by the template.
+func buildCommuteData(journeys []bq.CommuteJourney) CommuteData {
+	var points []CommutePoint
+	totalMinutes := 0
+	maxDuration := 0
+	longestCommute := ""
+
+	for _, j := range journeys {
+		// Parse the date using the two formats supported by the app.
+		t, err := time.Parse("02-Jan-06", j.Date)
+		if err != nil {
+			t, err = time.Parse("2006-01-02", j.Date)
+			if err != nil {
+				continue
+			}
+		}
+
+		// Keep only Tuesday, Wednesday, Thursday.
+		wd := t.Weekday()
+		if wd != time.Tuesday && wd != time.Wednesday && wd != time.Thursday {
+			continue
+		}
+
+		// Parse start time and apply the 7:00–10:30 window filter.
+		startMins, err := parseTimeToMinutes(j.StartTime)
+		if err != nil {
+			continue
+		}
+		if startMins < commuteMinWindowMinutes || startMins > commuteMaxWindowMinutes {
+			continue
+		}
+
+		// Parse end time; skip journeys without a valid end time.
+		endMins, err := parseTimeToMinutes(j.EndTime)
+		if err != nil {
+			continue
+		}
+		if endMins <= startMins {
+			continue
+		}
+
+		duration := endMins - startMins
+		durationStr := formatDuration(duration)
+
+		if duration > maxDuration {
+			maxDuration = duration
+			longestCommute = durationStr
+		}
+		totalMinutes += duration
+
+		// SVG bar geometry.
+		idx := len(points)
+		x := svgPaddingLeft + idx*svgBarStep + svgBarStep/2
+		barY := minutesToSVGY(startMins)
+		barHeight := minutesToSVGY(endMins) - barY
+
+		points = append(points, CommutePoint{
+			Date:       t.Format("Mon 02 Jan"),
+			Start:      j.StartTime,
+			End:        j.EndTime,
+			Duration:   durationStr,
+			X:          x,
+			BarX:       x - svgBarHalfWidth,
+			BarY:       barY,
+			BarHeight:  barHeight,
+			BarBottomY: barY + barHeight,
+		})
+	}
+
+	avgDuration := "–"
+	if len(points) > 0 {
+		avgDuration = formatDuration(totalMinutes / len(points))
+	}
+	if longestCommute == "" {
+		longestCommute = "–"
+	}
+
+	// Build Y-axis time labels every 30 minutes from 7:00 to 10:30.
+	var timeLabels []TimeLabel
+	for mins := svgMinMinutes; mins <= svgMaxMinutes; mins += 30 {
+		timeLabels = append(timeLabels, TimeLabel{
+			Y:     minutesToSVGY(mins),
+			Label: fmt.Sprintf("%02d:%02d", mins/60, mins%60),
+		})
+	}
+
+	numBars := len(points)
+	if numBars == 0 {
+		numBars = 1 // ensure a minimum-width chart even with no data
+	}
+	svgWidth := svgPaddingLeft + numBars*svgBarStep + svgPaddingRight
+
+	chartBottom := svgPaddingTop + svgPlotHeight
+
+	return CommuteData{
+		Commutes:       points,
+		TimeLabels:     timeLabels,
+		TotalCommutes:  len(points),
+		AvgDuration:    avgDuration,
+		LongestCommute: longestCommute,
+		SVGWidth:       svgWidth,
+		SVGHeight:      svgChartHeight,
+		ChartLeft:      svgPaddingLeft,
+		ChartTop:       svgPaddingTop,
+		ChartBottom:    chartBottom,
+		LabelY:         chartBottom + 15,
+	}
+}
+
+// parseTimeToMinutes converts a "H:MM" or "HH:MM" string into minutes from
+// midnight. It tolerates an optional seconds component.
+func parseTimeToMinutes(s string) (int, error) {
+	var h, m int
+	if _, err := fmt.Sscanf(s, "%d:%d", &h, &m); err != nil {
+		return 0, fmt.Errorf("parsing time %q: %w", s, err)
+	}
+	if h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, fmt.Errorf("time %q out of range", s)
+	}
+	return h*60 + m, nil
+}
+
+// formatDuration converts a number of minutes into a human-readable string
+// such as "45m" or "1h 30m".
+func formatDuration(minutes int) string {
+	if minutes <= 0 {
+		return "0m"
+	}
+	if minutes < 60 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	h := minutes / 60
+	m := minutes % 60
+	if m == 0 {
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dh %dm", h, m)
 }

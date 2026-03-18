@@ -33,6 +33,13 @@ type DayCount struct {
 	Count int
 }
 
+// CommuteJourney holds the fields needed for commute analysis.
+type CommuteJourney struct {
+	Date      string
+	StartTime string
+	EndTime   string
+}
+
 // Client wraps a BigQuery client for querying Pearl data.
 type Client struct {
 	bq      *bigquery.Client
@@ -96,4 +103,44 @@ func (c *Client) JourneyCountsByDay(ctx context.Context) ([]DayCount, error) {
 	}
 
 	return counts, nil
+}
+
+// CommuteJourneys returns all journeys with their start and end times for
+// commute analysis. Filtering by day and time window is done in the caller.
+func (c *Client) CommuteJourneys(ctx context.Context) ([]CommuteJourney, error) {
+	query := fmt.Sprintf(
+		"SELECT date, start_time, end_time FROM `%s.%s.%s` WHERE start_time IS NOT NULL AND end_time IS NOT NULL ORDER BY date, start_time",
+		c.project, c.dataset, journeysTable,
+	)
+
+	q := c.bq.Query(query)
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("executing query: %w", err)
+	}
+
+	type row struct {
+		Date      string `bigquery:"date"`
+		StartTime string `bigquery:"start_time"`
+		EndTime   string `bigquery:"end_time"`
+	}
+
+	var journeys []CommuteJourney
+	for {
+		var r row
+		err := it.Next(&r)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading row: %w", err)
+		}
+		journeys = append(journeys, CommuteJourney{
+			Date:      r.Date,
+			StartTime: r.StartTime,
+			EndTime:   r.EndTime,
+		})
+	}
+
+	return journeys, nil
 }
