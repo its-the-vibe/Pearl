@@ -23,7 +23,39 @@
         .subtitle {
             color: #8b949e;
             font-size: 0.875rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 0;
+        }
+
+        .tab {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+            text-decoration: none;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            margin-bottom: -1px;
+        }
+
+        .tab:hover {
+            color: #e6edf3;
+            background: #161b22;
+        }
+
+        .tab-active {
+            color: #e6edf3;
+            background: #0d1117;
+            border-color: #30363d;
+            border-bottom-color: #0d1117;
         }
 
         .heatmap-container {
@@ -162,6 +194,11 @@
 <body>
     <h1>🚇 Pearl</h1>
     <p class="subtitle">Mind the data gap. A deep-dive analytics dashboard for your London Oyster activity.</p>
+
+    <nav class="tabs">
+        <a href="/" class="tab tab-active">Overview</a>
+        <a href="/commutes" class="tab">Commutes</a>
+    </nav>
 
     <div class="heatmap-container">
         <div class="heatmap-title">Journey activity in the last year</div>

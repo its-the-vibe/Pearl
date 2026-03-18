@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pearl – Commutes</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            padding: 2rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 0;
+        }
+
+        .tab {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+            text-decoration: none;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            margin-bottom: -1px;
+        }
+
+        .tab:hover {
+            color: #e6edf3;
+            background: #161b22;
+        }
+
+        .tab-active {
+            color: #e6edf3;
+            background: #0d1117;
+            border-color: #30363d;
+            border-bottom-color: #0d1117;
+        }
+
+        .chart-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1.5rem;
+            display: inline-block;
+            max-width: 100%;
+        }
+
+        .chart-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #8b949e;
+            margin-bottom: 1rem;
+        }
+
+        .chart-scroll {
+            overflow-x: auto;
+        }
+
+        svg text {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        }
+
+        .stats {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 2rem;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+
+        .no-data {
+            color: #8b949e;
+            font-size: 0.875rem;
+            padding: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚇 Pearl</h1>
+    <p class="subtitle">Mind the data gap. A deep-dive analytics dashboard for your London Oyster activity.</p>
+
+    <nav class="tabs">
+        <a href="/" class="tab">Overview</a>
+        <a href="/commutes" class="tab tab-active">Commutes</a>
+    </nav>
+
+    <div class="chart-container">
+        <div class="chart-title">Morning commutes (Tue / Wed / Thu, 07:00 – 10:30)</div>
+        {{if .Commutes}}
+        <div class="chart-scroll">
+            <svg width="{{.SVGWidth}}" height="{{.SVGHeight}}" xmlns="http://www.w3.org/2000/svg">
+
+                <!-- Horizontal gridlines and Y-axis labels -->
+                {{range .TimeLabels}}
+                <line x1="{{$.ChartLeft}}" y1="{{.Y}}"
+                      x2="{{$.SVGWidth}}" y2="{{.Y}}"
+                      stroke="#30363d" stroke-width="1"/>
+                <text x="{{$.ChartLeft}}" y="{{.Y}}"
+                      dx="-4" dy="4"
+                      text-anchor="end"
+                      font-size="10"
+                      fill="#8b949e">{{.Label}}</text>
+                {{end}}
+
+                <!-- Y-axis line -->
+                <line x1="{{.ChartLeft}}" y1="{{.ChartTop}}"
+                      x2="{{.ChartLeft}}" y2="{{.ChartBottom}}"
+                      stroke="#30363d" stroke-width="1"/>
+
+                <!-- X-axis line -->
+                <line x1="{{.ChartLeft}}" y1="{{.ChartBottom}}"
+                      x2="{{.SVGWidth}}" y2="{{.ChartBottom}}"
+                      stroke="#30363d" stroke-width="1"/>
+
+                <!-- Commute bars -->
+                {{range .Commutes}}
+                <!-- Range bar: start → end -->
+                <rect x="{{.BarX}}" y="{{.BarY}}"
+                      width="16" height="{{.BarHeight}}"
+                      rx="2"
+                      fill="rgba(38,166,65,0.5)"
+                      stroke="#26a641"
+                      stroke-width="1">
+                    <title>{{.Date}}&#10;Start: {{.Start}}&#10;End: {{.End}}&#10;Duration: {{.Duration}}</title>
+                </rect>
+                <!-- Start marker -->
+                <circle cx="{{.X}}" cy="{{.BarY}}"
+                        r="3"
+                        fill="#39d353">
+                    <title>{{.Date}}&#10;Start: {{.Start}}</title>
+                </circle>
+                <!-- End marker -->
+                <circle cx="{{.X}}" cy="{{.BarBottomY}}"
+                        r="3"
+                        fill="#0e4429">
+                    <title>{{.Date}}&#10;End: {{.End}}</title>
+                </circle>
+                <!-- X-axis label (rotated -45°) -->
+                <text x="{{.X}}" y="{{$.LabelY}}"
+                      text-anchor="end"
+                      font-size="9"
+                      fill="#8b949e"
+                      transform="rotate(-45 {{.X}} {{$.LabelY}})">{{.Date}}</text>
+                {{end}}
+
+            </svg>
+        </div>
+        {{else}}
+        <div class="no-data">No commute data available yet.</div>
+        {{end}}
+    </div>
+
+    <div class="stats">
+        <div class="stat">
+            <span class="stat-value">{{.TotalCommutes}}</span>
+            <span class="stat-label">Commutes recorded</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">{{.AvgDuration}}</span>
+            <span class="stat-label">Average duration</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">{{.LongestCommute}}</span>
+            <span class="stat-label">Longest commute</span>
+        </div>
+    </div>
+</body>
+</html>
