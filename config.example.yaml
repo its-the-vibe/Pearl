@@ -12,3 +12,7 @@ bigquery:
 
   # BigQuery dataset that contains the journeys table.
   dataset: "your_dataset"
+
+  # BigQuery dataset that contains the ratings table (optional).
+  # When set, ratings are fetched and overlaid on the Commutes chart.
+  # ratings_dataset: "your_ratings_dataset"

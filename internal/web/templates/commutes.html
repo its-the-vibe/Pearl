@@ -108,6 +108,30 @@
             font-size: 0.875rem;
             padding: 1rem 0;
         }
+
+        .legend {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: #8b949e;
+            margin-bottom: 0.75rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .legend-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .legend-swatch-green  { background: #26a641; }
+        .legend-swatch-yellow { background: #e3b341; }
     </style>
 </head>
 <body>
@@ -121,6 +145,12 @@
 
     <div class="chart-container">
         <div class="chart-title">Morning commutes (Tue / Wed / Thu, 07:00 – 10:30)</div>
+        {{if .HasRatings}}
+        <div class="legend">
+            <span class="legend-item"><span class="legend-swatch legend-swatch-green"></span>Commute time</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch-yellow"></span>Rating (1–5)</span>
+        </div>
+        {{end}}
         {{if .Commutes}}
         <div class="chart-scroll">
             <svg width="{{.SVGWidth}}" height="{{.SVGHeight}}" xmlns="http://www.w3.org/2000/svg">
@@ -176,6 +206,42 @@
                       font-size="9"
                       fill="#8b949e"
                       transform="rotate(-45 {{.X}} {{$.LabelY}})">{{.Date}}</text>
+                {{end}}
+
+                {{if .HasRatings}}
+                <!-- Right Y-axis line (ratings) -->
+                <line x1="{{.ChartRight}}" y1="{{.ChartTop}}"
+                      x2="{{.ChartRight}}" y2="{{.ChartBottom}}"
+                      stroke="#30363d" stroke-width="1"/>
+
+                <!-- Right Y-axis labels (rating values 5 → 1) -->
+                {{range .RatingLabels}}
+                <text x="{{$.ChartRight}}" y="{{.Y}}"
+                      dx="4" dy="4"
+                      text-anchor="start"
+                      font-size="10"
+                      fill="#e3b341">{{.Value}}</text>
+                {{end}}
+
+                <!-- Ratings overlay: connecting line -->
+                {{if gt (len .Ratings) 1}}
+                <polyline
+                    points="{{range .Ratings}}{{.X}},{{.Y}} {{end}}"
+                    fill="none"
+                    stroke="#e3b341"
+                    stroke-width="1.5"
+                    stroke-linejoin="round"/>
+                {{end}}
+
+                <!-- Ratings overlay: data points -->
+                {{range .Ratings}}
+                <circle cx="{{.X}}" cy="{{.Y}}" r="4"
+                        fill="#e3b341"
+                        stroke="#0d1117"
+                        stroke-width="1">
+                    <title>{{.Date}}&#10;Rating: {{.Rating}}</title>
+                </circle>
+                {{end}}
                 {{end}}
 
             </svg>
