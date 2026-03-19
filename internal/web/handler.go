@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	bq "github.com/its-the-vibe/pearl/internal/bigquery"
@@ -59,10 +60,11 @@ type CommutePoint struct {
 
 // RatingPoint represents a single daily rating overlaid on the commute chart.
 type RatingPoint struct {
-	X      int     // x-coordinate aligned with the corresponding commute bar
-	Y      int     // y-coordinate on the right (ratings) Y-axis
-	Rating float64 // value between 1 and 5
-	Date   string  // e.g. "Tue 05 Mar" – used in tooltip
+	X          int     // x-coordinate aligned with the corresponding commute bar
+	Y          int     // y-coordinate on the right (ratings) Y-axis
+	Rating     float64 // value between 1 and 5
+	Date       string  // e.g. "Tue 05 Mar" – used in tooltip
+	HasJourney bool    // true when a journey bar exists at this x position
 }
 
 // RatingLabel positions a label on the right (ratings) Y-axis.
@@ -419,7 +421,47 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating) Co
 		})
 	}
 
-	numBars := len(points)
+	// Build ratings lookup keyed by ISO date.
+	ratingLookup := make(map[string]float64, len(ratings))
+	for _, r := range ratings {
+		ratingLookup[r.Date.Format("2006-01-02")] = r.Rating
+	}
+
+	// Build a sorted list of all unique dates from both journeys and ratings.
+	// This ensures rating-only dates expand the x-axis even when journey data
+	// is missing for those timestamps.
+	seenDates := make(map[string]bool)
+	var allDates []string
+	for _, p := range points {
+		if !seenDates[p.ISODate] {
+			allDates = append(allDates, p.ISODate)
+			seenDates[p.ISODate] = true
+		}
+	}
+	for isoDate := range ratingLookup {
+		if !seenDates[isoDate] {
+			allDates = append(allDates, isoDate)
+			seenDates[isoDate] = true
+		}
+	}
+	sort.Strings(allDates)
+
+	// Assign x positions to all dates based on the merged sorted order.
+	dateX := make(map[string]int, len(allDates))
+	for idx, date := range allDates {
+		dateX[date] = svgPaddingLeft + idx*svgBarStep + svgBarStep/2
+	}
+
+	// Re-assign x positions for journey bars using the merged date order.
+	journeyDateSet := make(map[string]bool, len(points))
+	for i := range points {
+		x := dateX[points[i].ISODate]
+		points[i].X = x
+		points[i].BarX = x - svgBarHalfWidth
+		journeyDateSet[points[i].ISODate] = true
+	}
+
+	numBars := len(allDates)
 	if numBars == 0 {
 		numBars = 1 // ensure a minimum-width chart even with no data
 	}
@@ -428,23 +470,20 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating) Co
 	chartBottom := svgPaddingTop + svgPlotHeight
 	chartRight := svgPaddingLeft + numBars*svgBarStep
 
-	// Build ratings overlay from the supplied daily ratings.
-	ratingLookup := make(map[string]float64, len(ratings))
-	for _, r := range ratings {
-		ratingLookup[r.Date.Format("2006-01-02")] = r.Rating
-	}
-
+	// Build rating points for all rating dates, including dates without journeys.
 	var ratingPoints []RatingPoint
-	for _, p := range points {
-		rating, ok := ratingLookup[p.ISODate]
+	for _, isoDate := range allDates {
+		rating, ok := ratingLookup[isoDate]
 		if !ok {
 			continue
 		}
+		t, _ := time.Parse("2006-01-02", isoDate)
 		ratingPoints = append(ratingPoints, RatingPoint{
-			X:      p.X,
-			Y:      ratingToSVGY(rating),
-			Rating: rating,
-			Date:   p.Date,
+			X:          dateX[isoDate],
+			Y:          ratingToSVGY(rating),
+			Rating:     rating,
+			Date:       t.Format("Mon 02 Jan"),
+			HasJourney: journeyDateSet[isoDate],
 		})
 	}
 
