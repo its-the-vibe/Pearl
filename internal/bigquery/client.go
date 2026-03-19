@@ -172,8 +172,8 @@ func (c *Client) Ratings(ctx context.Context) ([]DailyRating, error) {
 	}
 
 	type row struct {
-		Day    string  `bigquery:"day"`
-		Rating float64 `bigquery:"rating"`
+		Day    string `bigquery:"day"`
+		Rating int64  `bigquery:"rating"`
 	}
 
 	var ratings []DailyRating
@@ -191,7 +191,7 @@ func (c *Client) Ratings(ctx context.Context) ([]DailyRating, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parsing ratings date %q: %w", r.Day, err)
 		}
-		ratings = append(ratings, DailyRating{Date: t, Rating: r.Rating})
+		ratings = append(ratings, DailyRating{Date: t, Rating: float64(r.Rating)})
 	}
 
 	return ratings, nil
