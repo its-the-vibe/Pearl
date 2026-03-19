@@ -121,6 +121,12 @@
             display: flex;
             align-items: center;
             gap: 0.35rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .legend-item.inactive {
+            opacity: 0.4;
         }
 
         .legend-swatch {
@@ -147,8 +153,8 @@
         <div class="chart-title">Morning commutes (Tue / Wed / Thu, 07:00 – 10:30)</div>
         {{if .HasRatings}}
         <div class="legend">
-            <span class="legend-item"><span class="legend-swatch legend-swatch-green"></span>Commute time</span>
-            <span class="legend-item"><span class="legend-swatch legend-swatch-yellow"></span>Rating (1–5)</span>
+            <span class="legend-item" data-series="commute-series" tabindex="0" role="button"><span class="legend-swatch legend-swatch-green"></span>Commute time</span>
+            <span class="legend-item" data-series="rating-series" tabindex="0" role="button"><span class="legend-swatch legend-swatch-yellow"></span>Rating (1–5)</span>
         </div>
         {{end}}
         {{if or .Commutes .HasRatings}}
@@ -178,6 +184,7 @@
                       stroke="#30363d" stroke-width="1"/>
 
                 <!-- Commute bars -->
+                <g id="commute-series">
                 {{range .Commutes}}
                 <!-- Range bar: start → end -->
                 <rect x="{{.BarX}}" y="{{.BarY}}"
@@ -207,8 +214,10 @@
                       fill="#8b949e"
                       transform="rotate(-45 {{.X}} {{$.LabelY}})">{{.Date}}</text>
                 {{end}}
+                </g>
 
                 {{if .HasRatings}}
+                <g id="rating-series">
                 <!-- X-axis labels for rating-only dates (no corresponding journey bar) -->
                 {{range .Ratings}}
                 {{if not .HasJourney}}
@@ -253,6 +262,7 @@
                     <title>{{.Date}}&#10;Rating: {{.Rating}}</title>
                 </circle>
                 {{end}}
+                </g>
                 {{end}}
 
             </svg>
@@ -276,5 +286,25 @@
             <span class="stat-label">Longest commute</span>
         </div>
     </div>
+
+    <script>
+        document.querySelectorAll('.legend-item[data-series]').forEach(function(item) {
+            function toggle() {
+                var seriesId = item.getAttribute('data-series');
+                var seriesEl = document.getElementById(seriesId);
+                if (!seriesEl) return;
+                var isInactive = item.classList.contains('inactive');
+                seriesEl.style.display = isInactive ? '' : 'none';
+                item.classList.toggle('inactive', !isInactive);
+            }
+            item.addEventListener('click', toggle);
+            item.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                }
+            });
+        });
+    </script>
 </body>
 </html>
