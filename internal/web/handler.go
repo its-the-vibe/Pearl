@@ -73,23 +73,31 @@ type RatingLabel struct {
 	Value int
 }
 
+// DateRangeOption represents a selectable date range for the commutes chart.
+type DateRangeOption struct {
+	Label    string
+	Days     int  // 0 = all available
+	Selected bool
+}
+
 // CommuteData is passed to the commutes template.
 type CommuteData struct {
-	Commutes       []CommutePoint
-	TimeLabels     []TimeLabel
-	TotalCommutes  int
-	AvgDuration    string
-	LongestCommute string
-	SVGWidth       int
-	SVGHeight      int
-	ChartLeft      int // x of y-axis / left edge of plot area
-	ChartRight     int // x of right axis / right edge of plot area
-	ChartTop       int // y of top of plot area
-	ChartBottom    int // y of bottom of plot area (x-axis line)
-	LabelY         int // y for x-axis text labels
-	Ratings        []RatingPoint
-	RatingLabels   []RatingLabel
-	HasRatings     bool
+	Commutes         []CommutePoint
+	TimeLabels       []TimeLabel
+	TotalCommutes    int
+	AvgDuration      string
+	LongestCommute   string
+	SVGWidth         int
+	SVGHeight        int
+	ChartLeft        int // x of y-axis / left edge of plot area
+	ChartRight       int // x of right axis / right edge of plot area
+	ChartTop         int // y of top of plot area
+	ChartBottom      int // y of bottom of plot area (x-axis line)
+	LabelY           int // y for x-axis text labels
+	Ratings          []RatingPoint
+	RatingLabels     []RatingLabel
+	HasRatings       bool
+	DateRangeOptions []DateRangeOption
 }
 
 // Handler holds the dependencies for HTTP handlers.
@@ -154,12 +162,49 @@ func (h *Handler) handleCommutes(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("querying bigquery for ratings", "error", err)
 	}
 
-	data := buildCommuteData(journeys, ratings)
+	days := parseDaysParam(r.URL.Query().Get("days"))
+	data := buildCommuteData(journeys, ratings, days)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, "commutes.html", data); err != nil {
 		slog.Error("rendering commutes template", "error", err)
 	}
+}
+
+// parseDaysParam parses the "days" URL query parameter into a number of days.
+// Accepted values are "7", "30", "60", "90", and "0" (all available).
+// Any other value (including empty) returns the default of 30.
+func parseDaysParam(s string) int {
+	switch s {
+	case "7":
+		return 7
+	case "30":
+		return 30
+	case "60":
+		return 60
+	case "90":
+		return 90
+	case "0":
+		return 0
+	default:
+		return 30 // last 30 days is the default
+	}
+}
+
+// buildDateRangeOptions returns the list of date range options with the
+// selected flag set on whichever option matches selectedDays.
+func buildDateRangeOptions(selectedDays int) []DateRangeOption {
+	options := []DateRangeOption{
+		{Label: "Last 7 days", Days: 7},
+		{Label: "Last 30 days", Days: 30},
+		{Label: "Last 60 days", Days: 60},
+		{Label: "Last 90 days", Days: 90},
+		{Label: "All available", Days: 0},
+	}
+	for i := range options {
+		options[i].Selected = options[i].Days == selectedDays
+	}
+	return options
 }
 
 // buildHeatmapData converts raw day counts into a grid suitable for the heatmap template.
@@ -335,7 +380,35 @@ func ratingToSVGY(rating float64) int {
 // buildCommuteData filters journeys to commute candidates (Tue/Wed/Thu,
 // 7:00–10:30 start time) and computes all values needed by the template.
 // ratings is optional; pass nil to omit the ratings overlay.
-func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating) CommuteData {
+// days limits results to the last N days; 0 means all available data.
+func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, days int) CommuteData {
+	// Apply date range filter when a limit is requested.
+	if days > 0 {
+		cutoff := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -days)
+		var filteredJourneys []bq.CommuteJourney
+		for _, j := range journeys {
+			t, err := time.Parse("02-Jan-06", j.Date)
+			if err != nil {
+				t, err = time.Parse("2006-01-02", j.Date)
+				if err != nil {
+					continue
+				}
+			}
+			if !t.Before(cutoff) {
+				filteredJourneys = append(filteredJourneys, j)
+			}
+		}
+		journeys = filteredJourneys
+
+		var filteredRatings []bq.DailyRating
+		for _, r := range ratings {
+			if !r.Date.Before(cutoff) {
+				filteredRatings = append(filteredRatings, r)
+			}
+		}
+		ratings = filteredRatings
+	}
+
 	var points []CommutePoint
 	totalMinutes := 0
 	maxDuration := 0
@@ -497,21 +570,22 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating) Co
 	}
 
 	return CommuteData{
-		Commutes:       points,
-		TimeLabels:     timeLabels,
-		TotalCommutes:  len(points),
-		AvgDuration:    avgDuration,
-		LongestCommute: longestCommute,
-		SVGWidth:       svgWidth,
-		SVGHeight:      svgChartHeight,
-		ChartLeft:      svgPaddingLeft,
-		ChartRight:     chartRight,
-		ChartTop:       svgPaddingTop,
-		ChartBottom:    chartBottom,
-		LabelY:         chartBottom + 15,
-		Ratings:        ratingPoints,
-		RatingLabels:   ratingLabels,
-		HasRatings:     len(ratingPoints) > 0,
+		Commutes:         points,
+		TimeLabels:       timeLabels,
+		TotalCommutes:    len(points),
+		AvgDuration:      avgDuration,
+		LongestCommute:   longestCommute,
+		SVGWidth:         svgWidth,
+		SVGHeight:        svgChartHeight,
+		ChartLeft:        svgPaddingLeft,
+		ChartRight:       chartRight,
+		ChartTop:         svgPaddingTop,
+		ChartBottom:      chartBottom,
+		LabelY:           chartBottom + 15,
+		Ratings:          ratingPoints,
+		RatingLabels:     ratingLabels,
+		HasRatings:       len(ratingPoints) > 0,
+		DateRangeOptions: buildDateRangeOptions(days),
 	}
 }
 

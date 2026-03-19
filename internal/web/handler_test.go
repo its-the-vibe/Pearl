@@ -165,7 +165,7 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestBuildCommuteData_Empty(t *testing.T) {
-	data := buildCommuteData(nil, nil)
+	data := buildCommuteData(nil, nil, 0)
 
 	if data.TotalCommutes != 0 {
 		t.Errorf("expected 0 commutes, got %d", data.TotalCommutes)
@@ -203,7 +203,7 @@ func TestBuildCommuteData_FiltersDaysOfWeek(t *testing.T) {
 		{Date: sat.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
 	}
 
-	data := buildCommuteData(journeys, nil)
+	data := buildCommuteData(journeys, nil, 0)
 	if data.TotalCommutes != 3 {
 		t.Errorf("expected 3 commutes (Tue/Wed/Thu only), got %d", data.TotalCommutes)
 	}
@@ -225,7 +225,7 @@ func TestBuildCommuteData_FiltersTimeWindow(t *testing.T) {
 		{Date: wed.Format("2006-01-02"), StartTime: "10:31", EndTime: "11:30"},
 	}
 
-	data := buildCommuteData(journeys, nil)
+	data := buildCommuteData(journeys, nil, 0)
 	if data.TotalCommutes != 3 {
 		t.Errorf("expected 3 commutes within time window, got %d", data.TotalCommutes)
 	}
@@ -241,7 +241,7 @@ func TestBuildCommuteData_ComputesDuration(t *testing.T) {
 		{Date: thu.Format("2006-01-02"), StartTime: "07:30", EndTime: "09:00"},
 	}
 
-	data := buildCommuteData(journeys, nil)
+	data := buildCommuteData(journeys, nil, 0)
 	if data.TotalCommutes != 2 {
 		t.Fatalf("expected 2 commutes, got %d", data.TotalCommutes)
 	}
@@ -262,7 +262,7 @@ func TestBuildCommuteData_SVGGeometry(t *testing.T) {
 		{Date: tue.Format("2006-01-02"), StartTime: "07:00", EndTime: "10:30"},
 	}
 
-	data := buildCommuteData(journeys, nil)
+	data := buildCommuteData(journeys, nil, 0)
 	if data.TotalCommutes != 1 {
 		t.Fatalf("expected 1 commute, got %d", data.TotalCommutes)
 	}
@@ -298,7 +298,7 @@ func TestBuildCommuteData_SkipsInvalidEndTime(t *testing.T) {
 		{Date: wed.Format("2006-01-02"), StartTime: "09:00", EndTime: ""},
 	}
 
-	data := buildCommuteData(journeys, nil)
+	data := buildCommuteData(journeys, nil, 0)
 	if data.TotalCommutes != 1 {
 		t.Errorf("expected 1 commute (skipping invalid end times), got %d", data.TotalCommutes)
 	}
@@ -337,7 +337,7 @@ func TestBuildCommuteData_RatingsOverlay(t *testing.T) {
 		// No rating for Thursday – that commute gets no overlay point.
 	}
 
-	data := buildCommuteData(journeys, ratings)
+	data := buildCommuteData(journeys, ratings, 0)
 
 	if data.TotalCommutes != 3 {
 		t.Fatalf("expected 3 commutes, got %d", data.TotalCommutes)
@@ -375,7 +375,7 @@ func TestBuildCommuteData_NoRatingsWhenNil(t *testing.T) {
 		{Date: wed.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
 	}
 
-	data := buildCommuteData(journeys, nil)
+	data := buildCommuteData(journeys, nil, 0)
 
 	if data.HasRatings {
 		t.Error("HasRatings should be false when no ratings provided")
@@ -405,7 +405,7 @@ func TestBuildCommuteData_RatingExpandsXAxis(t *testing.T) {
 		{Date: fri, Rating: 3},
 	}
 
-	data := buildCommuteData(journeys, ratings)
+	data := buildCommuteData(journeys, ratings, 0)
 
 	// Two journeys should be recorded.
 	if data.TotalCommutes != 2 {
@@ -449,7 +449,7 @@ func TestBuildCommuteData_RatingExpandsXAxis(t *testing.T) {
 }
 
 func TestBuildCommuteData_RatingLabels(t *testing.T) {
-	data := buildCommuteData(nil, nil)
+	data := buildCommuteData(nil, nil, 0)
 
 	if len(data.RatingLabels) != 5 {
 		t.Fatalf("expected 5 rating labels, got %d", len(data.RatingLabels))
@@ -468,5 +468,120 @@ func TestBuildCommuteData_RatingLabels(t *testing.T) {
 			t.Errorf("RatingLabels[%d].Y (%d) should be greater than RatingLabels[%d].Y (%d)",
 				i, data.RatingLabels[i].Y, i-1, data.RatingLabels[i-1].Y)
 		}
+	}
+}
+
+// ---- Date range selector tests ----
+
+func TestParseDaysParam(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"7", 7},
+		{"30", 30},
+		{"60", 60},
+		{"90", 90},
+		{"0", 0},
+		{"", 30},    // empty → default 30
+		{"15", 30},  // unknown value → default 30
+		{"abc", 30}, // non-numeric → default 30
+	}
+	for _, tt := range tests {
+		got := parseDaysParam(tt.input)
+		if got != tt.want {
+			t.Errorf("parseDaysParam(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestBuildDateRangeOptions(t *testing.T) {
+	// Default selection (30 days) should mark only the "Last 30 days" option.
+	opts := buildDateRangeOptions(30)
+	if len(opts) != 5 {
+		t.Fatalf("expected 5 options, got %d", len(opts))
+	}
+	wantDays := []int{7, 30, 60, 90, 0}
+	for i, opt := range opts {
+		if opt.Days != wantDays[i] {
+			t.Errorf("opts[%d].Days = %d, want %d", i, opt.Days, wantDays[i])
+		}
+		wantSelected := opt.Days == 30
+		if opt.Selected != wantSelected {
+			t.Errorf("opts[%d] (%d days) Selected = %v, want %v", i, opt.Days, opt.Selected, wantSelected)
+		}
+	}
+
+	// "All available" selection should mark only the Days==0 option.
+	allOpts := buildDateRangeOptions(0)
+	for _, opt := range allOpts {
+		wantSelected := opt.Days == 0
+		if opt.Selected != wantSelected {
+			t.Errorf("all-available: opt (%d days) Selected = %v, want %v", opt.Days, opt.Selected, wantSelected)
+		}
+	}
+}
+
+func TestBuildCommuteData_DateRangeOptions_PresentInOutput(t *testing.T) {
+	data := buildCommuteData(nil, nil, 30)
+
+	if len(data.DateRangeOptions) != 5 {
+		t.Fatalf("expected 5 DateRangeOptions, got %d", len(data.DateRangeOptions))
+	}
+	// Exactly one option should be selected.
+	selectedCount := 0
+	for _, opt := range data.DateRangeOptions {
+		if opt.Selected {
+			selectedCount++
+			if opt.Days != 30 {
+				t.Errorf("selected option has Days = %d, want 30", opt.Days)
+			}
+		}
+	}
+	if selectedCount != 1 {
+		t.Errorf("expected exactly 1 selected option, got %d", selectedCount)
+	}
+}
+
+func TestBuildCommuteData_FiltersByDateRange(t *testing.T) {
+	now := time.Now().UTC().Truncate(24 * time.Hour)
+
+	// Find the most recent Tuesday on or before today.
+	var recentTue time.Time
+	for d := 0; d < 7; d++ {
+		candidate := now.AddDate(0, 0, -d)
+		if candidate.Weekday() == time.Tuesday {
+			recentTue = candidate
+			break
+		}
+	}
+	if recentTue.IsZero() {
+		t.Fatal("could not find a recent Tuesday within the last 7 days")
+	}
+
+	// oldTue is 10 weeks before recentTue (outside 30-day window, inside 90-day window).
+	oldTue := recentTue.AddDate(0, 0, -70)
+
+	journeys := []bq.CommuteJourney{
+		{Date: recentTue.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
+		{Date: oldTue.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
+	}
+
+	// With 30-day range: only the recent commute should be visible.
+	data30 := buildCommuteData(journeys, nil, 30)
+	if data30.TotalCommutes != 1 {
+		t.Errorf("days=30: expected 1 commute, got %d", data30.TotalCommutes)
+	}
+
+	// With 90-day range: both commutes should be visible.
+	data90 := buildCommuteData(journeys, nil, 90)
+	if data90.TotalCommutes != 2 {
+		t.Errorf("days=90: expected 2 commutes, got %d", data90.TotalCommutes)
+	}
+
+	// With all available (0): both commutes should be visible.
+	dataAll := buildCommuteData(journeys, nil, 0)
+	if dataAll.TotalCommutes != 2 {
+		t.Errorf("days=0: expected 2 commutes, got %d", dataAll.TotalCommutes)
 	}
 }

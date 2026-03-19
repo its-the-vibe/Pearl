@@ -138,6 +138,36 @@
 
         .legend-swatch-green  { background: #26a641; }
         .legend-swatch-yellow { background: #e3b341; }
+
+        .date-range-selector {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .range-btn {
+            display: inline-block;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8125rem;
+            color: #8b949e;
+            text-decoration: none;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            background: transparent;
+        }
+
+        .range-btn:hover {
+            color: #e6edf3;
+            background: #161b22;
+            border-color: #8b949e;
+        }
+
+        .range-btn-active {
+            color: #e6edf3;
+            background: #161b22;
+            border-color: #58a6ff;
+        }
     </style>
 </head>
 <body>
@@ -148,6 +178,12 @@
         <a href="/" class="tab">Overview</a>
         <a href="/commutes" class="tab tab-active">Commutes</a>
     </nav>
+
+    <div class="date-range-selector">
+        {{range .DateRangeOptions}}
+        <a href="/commutes?days={{.Days}}" class="range-btn{{if .Selected}} range-btn-active{{end}}">{{.Label}}</a>
+        {{end}}
+    </div>
 
     <div class="chart-container">
         <div class="chart-title">Morning commutes (Tue / Wed / Thu, 07:00 – 10:30)</div>
