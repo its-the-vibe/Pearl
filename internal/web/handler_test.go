@@ -165,7 +165,7 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestBuildCommuteData_Empty(t *testing.T) {
-	data := buildCommuteData(nil)
+	data := buildCommuteData(nil, nil)
 
 	if data.TotalCommutes != 0 {
 		t.Errorf("expected 0 commutes, got %d", data.TotalCommutes)
@@ -203,7 +203,7 @@ func TestBuildCommuteData_FiltersDaysOfWeek(t *testing.T) {
 		{Date: sat.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
 	}
 
-	data := buildCommuteData(journeys)
+	data := buildCommuteData(journeys, nil)
 	if data.TotalCommutes != 3 {
 		t.Errorf("expected 3 commutes (Tue/Wed/Thu only), got %d", data.TotalCommutes)
 	}
@@ -225,7 +225,7 @@ func TestBuildCommuteData_FiltersTimeWindow(t *testing.T) {
 		{Date: wed.Format("2006-01-02"), StartTime: "10:31", EndTime: "11:30"},
 	}
 
-	data := buildCommuteData(journeys)
+	data := buildCommuteData(journeys, nil)
 	if data.TotalCommutes != 3 {
 		t.Errorf("expected 3 commutes within time window, got %d", data.TotalCommutes)
 	}
@@ -241,7 +241,7 @@ func TestBuildCommuteData_ComputesDuration(t *testing.T) {
 		{Date: thu.Format("2006-01-02"), StartTime: "07:30", EndTime: "09:00"},
 	}
 
-	data := buildCommuteData(journeys)
+	data := buildCommuteData(journeys, nil)
 	if data.TotalCommutes != 2 {
 		t.Fatalf("expected 2 commutes, got %d", data.TotalCommutes)
 	}
@@ -262,7 +262,7 @@ func TestBuildCommuteData_SVGGeometry(t *testing.T) {
 		{Date: tue.Format("2006-01-02"), StartTime: "07:00", EndTime: "10:30"},
 	}
 
-	data := buildCommuteData(journeys)
+	data := buildCommuteData(journeys, nil)
 	if data.TotalCommutes != 1 {
 		t.Fatalf("expected 1 commute, got %d", data.TotalCommutes)
 	}
@@ -298,8 +298,116 @@ func TestBuildCommuteData_SkipsInvalidEndTime(t *testing.T) {
 		{Date: wed.Format("2006-01-02"), StartTime: "09:00", EndTime: ""},
 	}
 
-	data := buildCommuteData(journeys)
+	data := buildCommuteData(journeys, nil)
 	if data.TotalCommutes != 1 {
 		t.Errorf("expected 1 commute (skipping invalid end times), got %d", data.TotalCommutes)
+	}
+}
+
+// ---- Rating overlay tests ----
+
+func TestRatingToSVGY(t *testing.T) {
+	// Rating 5 maps to the top of the plot area.
+	if got := ratingToSVGY(5); got != svgPaddingTop {
+		t.Errorf("ratingToSVGY(5) = %d, want %d (svgPaddingTop)", got, svgPaddingTop)
+	}
+	// Rating 1 maps to the bottom of the plot area.
+	if got := ratingToSVGY(1); got != svgPaddingTop+svgPlotHeight {
+		t.Errorf("ratingToSVGY(1) = %d, want %d", got, svgPaddingTop+svgPlotHeight)
+	}
+	// Rating 3 maps to the midpoint.
+	want := svgPaddingTop + svgPlotHeight/2
+	if got := ratingToSVGY(3); got != want {
+		t.Errorf("ratingToSVGY(3) = %d, want %d (midpoint)", got, want)
+	}
+}
+
+func TestBuildCommuteData_RatingsOverlay(t *testing.T) {
+	tue, wed, thu := commuteWeekDates()
+
+	journeys := []bq.CommuteJourney{
+		{Date: tue.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
+		{Date: wed.Format("2006-01-02"), StartTime: "08:30", EndTime: "09:30"},
+		{Date: thu.Format("2006-01-02"), StartTime: "07:15", EndTime: "08:45"},
+	}
+
+	ratings := []bq.DailyRating{
+		{Date: tue, Rating: 5},
+		{Date: wed, Rating: 3},
+		// No rating for Thursday – that commute gets no overlay point.
+	}
+
+	data := buildCommuteData(journeys, ratings)
+
+	if data.TotalCommutes != 3 {
+		t.Fatalf("expected 3 commutes, got %d", data.TotalCommutes)
+	}
+	if !data.HasRatings {
+		t.Error("HasRatings should be true")
+	}
+	if len(data.Ratings) != 2 {
+		t.Fatalf("expected 2 rating points, got %d", len(data.Ratings))
+	}
+
+	// Tuesday rating (5) should map to the top of the plot.
+	if data.Ratings[0].Rating != 5 {
+		t.Errorf("first rating = %v, want 5", data.Ratings[0].Rating)
+	}
+	if data.Ratings[0].Y != svgPaddingTop {
+		t.Errorf("rating=5 Y = %d, want %d (top of plot)", data.Ratings[0].Y, svgPaddingTop)
+	}
+	// X must match the Tuesday commute bar.
+	if data.Ratings[0].X != data.Commutes[0].X {
+		t.Errorf("rating X = %d, want %d (Tuesday commute X)", data.Ratings[0].X, data.Commutes[0].X)
+	}
+
+	// Wednesday rating (3) should map to the midpoint of the plot.
+	wantMid := svgPaddingTop + svgPlotHeight/2
+	if data.Ratings[1].Y != wantMid {
+		t.Errorf("rating=3 Y = %d, want %d (midpoint)", data.Ratings[1].Y, wantMid)
+	}
+}
+
+func TestBuildCommuteData_NoRatingsWhenNil(t *testing.T) {
+	_, wed, _ := commuteWeekDates()
+
+	journeys := []bq.CommuteJourney{
+		{Date: wed.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
+	}
+
+	data := buildCommuteData(journeys, nil)
+
+	if data.HasRatings {
+		t.Error("HasRatings should be false when no ratings provided")
+	}
+	if len(data.Ratings) != 0 {
+		t.Errorf("expected 0 rating points, got %d", len(data.Ratings))
+	}
+	// RatingLabels should still be populated for template rendering.
+	if len(data.RatingLabels) != 5 {
+		t.Errorf("expected 5 rating labels, got %d", len(data.RatingLabels))
+	}
+}
+
+func TestBuildCommuteData_RatingLabels(t *testing.T) {
+	data := buildCommuteData(nil, nil)
+
+	if len(data.RatingLabels) != 5 {
+		t.Fatalf("expected 5 rating labels, got %d", len(data.RatingLabels))
+	}
+	// Labels should be ordered 5 → 1 (top to bottom).
+	for i, want := range []int{5, 4, 3, 2, 1} {
+		if data.RatingLabels[i].Value != want {
+			t.Errorf("RatingLabels[%d].Value = %d, want %d", i, data.RatingLabels[i].Value, want)
+		}
+	}
+	// Labels are ordered 5 → 1 (top to bottom), so Y coordinates must be
+	// strictly increasing: rating 5 sits at the top (smallest Y) and
+	// rating 1 sits at the bottom (largest Y).
+	for i := 1; i < len(data.RatingLabels); i++ {
+		if data.RatingLabels[i].Y <= data.RatingLabels[i-1].Y {
+			t.Errorf("RatingLabels[%d].Y (%d) should be greater than RatingLabels[%d].Y (%d)",
+				i, data.RatingLabels[i].Y, i-1, data.RatingLabels[i-1].Y)
+		}
 	}
 }

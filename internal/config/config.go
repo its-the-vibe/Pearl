@@ -13,8 +13,9 @@ type Config struct {
 		Port int `yaml:"port"`
 	} `yaml:"server"`
 	BigQuery struct {
-		ProjectID string `yaml:"project_id"`
-		Dataset   string `yaml:"dataset"`
+		ProjectID      string `yaml:"project_id"`
+		Dataset        string `yaml:"dataset"`
+		RatingsDataset string `yaml:"ratings_dataset"`
 	} `yaml:"bigquery"`
 }
 

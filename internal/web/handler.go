@@ -46,6 +46,7 @@ type TimeLabel struct {
 // CommutePoint represents a single commute journey rendered in the SVG chart.
 type CommutePoint struct {
 	Date        string // e.g. "Tue 05 Mar" – used as x-axis label
+	ISODate     string // e.g. "2024-03-05" – used to match with ratings
 	Start       string // e.g. "07:45" – used in tooltip
 	End         string // e.g. "09:15" – used in tooltip
 	Duration    string // e.g. "1h 30m" – used in tooltip
@@ -54,6 +55,20 @@ type CommutePoint struct {
 	BarY        int    // top y of bar rect (= start time position)
 	BarHeight   int    // height of bar rect
 	BarBottomY  int    // BarY + BarHeight (= end time position)
+}
+
+// RatingPoint represents a single daily rating overlaid on the commute chart.
+type RatingPoint struct {
+	X      int     // x-coordinate aligned with the corresponding commute bar
+	Y      int     // y-coordinate on the right (ratings) Y-axis
+	Rating float64 // value between 1 and 5
+	Date   string  // e.g. "Tue 05 Mar" – used in tooltip
+}
+
+// RatingLabel positions a label on the right (ratings) Y-axis.
+type RatingLabel struct {
+	Y     int
+	Value int
 }
 
 // CommuteData is passed to the commutes template.
@@ -66,9 +81,13 @@ type CommuteData struct {
 	SVGWidth       int
 	SVGHeight      int
 	ChartLeft      int // x of y-axis / left edge of plot area
+	ChartRight     int // x of right axis / right edge of plot area
 	ChartTop       int // y of top of plot area
 	ChartBottom    int // y of bottom of plot area (x-axis line)
 	LabelY         int // y for x-axis text labels
+	Ratings        []RatingPoint
+	RatingLabels   []RatingLabel
+	HasRatings     bool
 }
 
 // Handler holds the dependencies for HTTP handlers.
@@ -127,7 +146,13 @@ func (h *Handler) handleCommutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := buildCommuteData(journeys)
+	ratings, err := h.bqClient.Ratings(r.Context())
+	if err != nil {
+		// Ratings are optional; log and continue without the overlay.
+		slog.Warn("querying bigquery for ratings", "error", err)
+	}
+
+	data := buildCommuteData(journeys, ratings)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, "commutes.html", data); err != nil {
@@ -298,9 +323,17 @@ func minutesToSVGY(minutes int) int {
 	return svgPaddingTop + (minutes-svgMinMinutes)*svgPlotHeight/svgMinutesRange
 }
 
+// ratingToSVGY maps a rating value (1–5) to a Y coordinate in the SVG chart,
+// sharing the same plot area as the commute bars. Rating 5 maps to the top of
+// the plot and rating 1 maps to the bottom.
+func ratingToSVGY(rating float64) int {
+	return svgPaddingTop + int((5.0-rating)/4.0*float64(svgPlotHeight))
+}
+
 // buildCommuteData filters journeys to commute candidates (Tue/Wed/Thu,
 // 7:00–10:30 start time) and computes all values needed by the template.
-func buildCommuteData(journeys []bq.CommuteJourney) CommuteData {
+// ratings is optional; pass nil to omit the ratings overlay.
+func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating) CommuteData {
 	var points []CommutePoint
 	totalMinutes := 0
 	maxDuration := 0
@@ -357,6 +390,7 @@ func buildCommuteData(journeys []bq.CommuteJourney) CommuteData {
 
 		points = append(points, CommutePoint{
 			Date:       t.Format("Mon 02 Jan"),
+			ISODate:    t.Format("2006-01-02"),
 			Start:      j.StartTime,
 			End:        j.EndTime,
 			Duration:   durationStr,
@@ -392,6 +426,36 @@ func buildCommuteData(journeys []bq.CommuteJourney) CommuteData {
 	svgWidth := svgPaddingLeft + numBars*svgBarStep + svgPaddingRight
 
 	chartBottom := svgPaddingTop + svgPlotHeight
+	chartRight := svgPaddingLeft + numBars*svgBarStep
+
+	// Build ratings overlay from the supplied daily ratings.
+	ratingLookup := make(map[string]float64, len(ratings))
+	for _, r := range ratings {
+		ratingLookup[r.Date.Format("2006-01-02")] = r.Rating
+	}
+
+	var ratingPoints []RatingPoint
+	for _, p := range points {
+		rating, ok := ratingLookup[p.ISODate]
+		if !ok {
+			continue
+		}
+		ratingPoints = append(ratingPoints, RatingPoint{
+			X:      p.X,
+			Y:      ratingToSVGY(rating),
+			Rating: rating,
+			Date:   p.Date,
+		})
+	}
+
+	// Right Y-axis labels for ratings 5 → 1 (top to bottom).
+	var ratingLabels []RatingLabel
+	for v := 5; v >= 1; v-- {
+		ratingLabels = append(ratingLabels, RatingLabel{
+			Y:     ratingToSVGY(float64(v)),
+			Value: v,
+		})
+	}
 
 	return CommuteData{
 		Commutes:       points,
@@ -402,9 +466,13 @@ func buildCommuteData(journeys []bq.CommuteJourney) CommuteData {
 		SVGWidth:       svgWidth,
 		SVGHeight:      svgChartHeight,
 		ChartLeft:      svgPaddingLeft,
+		ChartRight:     chartRight,
 		ChartTop:       svgPaddingTop,
 		ChartBottom:    chartBottom,
 		LabelY:         chartBottom + 15,
+		Ratings:        ratingPoints,
+		RatingLabels:   ratingLabels,
+		HasRatings:     len(ratingPoints) > 0,
 	}
 }
 

@@ -29,7 +29,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	bqClient, err := bq.New(ctx, cfg.BigQuery.ProjectID, cfg.BigQuery.Dataset)
+	bqClient, err := bq.New(ctx, cfg.BigQuery.ProjectID, cfg.BigQuery.Dataset, cfg.BigQuery.RatingsDataset)
 	if err != nil {
 		slog.Error("creating bigquery client", "error", err)
 		os.Exit(1)
