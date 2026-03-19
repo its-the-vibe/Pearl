@@ -389,6 +389,65 @@ func TestBuildCommuteData_NoRatingsWhenNil(t *testing.T) {
 	}
 }
 
+func TestBuildCommuteData_RatingExpandsXAxis(t *testing.T) {
+	tue, wed, _ := commuteWeekDates()
+	// Friday is not a Tue/Wed/Thu commute day – it has no journey but will have a rating.
+	fri := time.Date(2024, 1, 5, 0, 0, 0, 0, time.UTC)
+
+	journeys := []bq.CommuteJourney{
+		{Date: tue.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
+		{Date: wed.Format("2006-01-02"), StartTime: "08:30", EndTime: "09:30"},
+	}
+
+	ratings := []bq.DailyRating{
+		{Date: tue, Rating: 5},
+		// Rating for a date with no corresponding journey – should expand x-axis.
+		{Date: fri, Rating: 3},
+	}
+
+	data := buildCommuteData(journeys, ratings)
+
+	// Two journeys should be recorded.
+	if data.TotalCommutes != 2 {
+		t.Fatalf("expected 2 commutes, got %d", data.TotalCommutes)
+	}
+
+	// There should be two rating points: one for Tuesday (has journey) and one for Friday (no journey).
+	if len(data.Ratings) != 2 {
+		t.Fatalf("expected 2 rating points, got %d", len(data.Ratings))
+	}
+
+	// Tuesday rating has a corresponding journey bar.
+	if !data.Ratings[0].HasJourney {
+		t.Error("Tuesday rating should have HasJourney = true")
+	}
+
+	// Friday rating has no corresponding journey bar.
+	if data.Ratings[1].HasJourney {
+		t.Error("Friday rating should have HasJourney = false")
+	}
+
+	// The SVG width must accommodate three dates (Tue, Wed, Fri) – wider than just 2 journey bars.
+	expectedMinWidth := svgPaddingLeft + 3*svgBarStep + svgPaddingRight
+	if data.SVGWidth < expectedMinWidth {
+		t.Errorf("SVGWidth = %d, want at least %d to include rating-only date", data.SVGWidth, expectedMinWidth)
+	}
+
+	// The Friday rating x-coordinate must be to the right of the Wednesday journey bar.
+	wedX := data.Commutes[1].X
+	friX := data.Ratings[1].X
+	if friX <= wedX {
+		t.Errorf("Friday rating X (%d) should be to the right of Wednesday journey X (%d)", friX, wedX)
+	}
+
+	// The Tuesday rating must share its X with the Tuesday journey bar.
+	tueJourneyX := data.Commutes[0].X
+	tueRatingX := data.Ratings[0].X
+	if tueRatingX != tueJourneyX {
+		t.Errorf("Tuesday rating X (%d) should match Tuesday journey X (%d)", tueRatingX, tueJourneyX)
+	}
+}
+
 func TestBuildCommuteData_RatingLabels(t *testing.T) {
 	data := buildCommuteData(nil, nil)
 

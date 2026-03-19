@@ -151,7 +151,7 @@
             <span class="legend-item"><span class="legend-swatch legend-swatch-yellow"></span>Rating (1–5)</span>
         </div>
         {{end}}
-        {{if .Commutes}}
+        {{if or .Commutes .HasRatings}}
         <div class="chart-scroll">
             <svg width="{{.SVGWidth}}" height="{{.SVGHeight}}" xmlns="http://www.w3.org/2000/svg">
 
@@ -209,6 +209,17 @@
                 {{end}}
 
                 {{if .HasRatings}}
+                <!-- X-axis labels for rating-only dates (no corresponding journey bar) -->
+                {{range .Ratings}}
+                {{if not .HasJourney}}
+                <text x="{{.X}}" y="{{$.LabelY}}"
+                      text-anchor="end"
+                      font-size="9"
+                      fill="#8b949e"
+                      transform="rotate(-45 {{.X}} {{$.LabelY}})">{{.Date}}</text>
+                {{end}}
+                {{end}}
+
                 <!-- Right Y-axis line (ratings) -->
                 <line x1="{{.ChartRight}}" y1="{{.ChartTop}}"
                       x2="{{.ChartRight}}" y2="{{.ChartBottom}}"
