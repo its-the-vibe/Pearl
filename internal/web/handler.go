@@ -64,6 +64,7 @@ type RatingPoint struct {
 	Y          int     // y-coordinate on the right (ratings) Y-axis
 	Rating     float64 // value between 1 and 5
 	Date       string  // e.g. "Tue 05 Mar" – used in tooltip
+	Comment    string  // optional free-text comment; empty when not set
 	HasJourney bool    // true when a journey bar exists at this x position
 }
 
@@ -86,6 +87,7 @@ type CommuteData struct {
 	TimeLabels       []TimeLabel
 	TotalCommutes    int
 	AvgDuration      string
+	ShortestCommute  string
 	LongestCommute   string
 	SVGWidth         int
 	SVGHeight        int
@@ -412,7 +414,9 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 	var points []CommutePoint
 	totalMinutes := 0
 	maxDuration := 0
+	minDuration := -1
 	longestCommute := ""
+	shortestCommute := ""
 
 	for _, j := range journeys {
 		// Parse the date using the two formats supported by the app.
@@ -455,6 +459,10 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 			maxDuration = duration
 			longestCommute = durationStr
 		}
+		if minDuration < 0 || duration < minDuration {
+			minDuration = duration
+			shortestCommute = durationStr
+		}
 		totalMinutes += duration
 
 		// SVG bar geometry.
@@ -484,6 +492,9 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 	if longestCommute == "" {
 		longestCommute = "–"
 	}
+	if shortestCommute == "" {
+		shortestCommute = "–"
+	}
 
 	// Build Y-axis time labels every 30 minutes from 7:00 to 10:30.
 	var timeLabels []TimeLabel
@@ -495,9 +506,13 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 	}
 
 	// Build ratings lookup keyed by ISO date.
-	ratingLookup := make(map[string]float64, len(ratings))
+	type ratingEntry struct {
+		rating  float64
+		comment string
+	}
+	ratingLookup := make(map[string]ratingEntry, len(ratings))
 	for _, r := range ratings {
-		ratingLookup[r.Date.Format("2006-01-02")] = r.Rating
+		ratingLookup[r.Date.Format("2006-01-02")] = ratingEntry{rating: r.Rating, comment: r.Comment}
 	}
 
 	// Build a sorted list of all unique dates from both journeys and ratings.
@@ -546,16 +561,17 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 	// Build rating points for all rating dates, including dates without journeys.
 	var ratingPoints []RatingPoint
 	for _, isoDate := range allDates {
-		rating, ok := ratingLookup[isoDate]
+		entry, ok := ratingLookup[isoDate]
 		if !ok {
 			continue
 		}
 		t, _ := time.Parse("2006-01-02", isoDate)
 		ratingPoints = append(ratingPoints, RatingPoint{
 			X:          dateX[isoDate],
-			Y:          ratingToSVGY(rating),
-			Rating:     rating,
+			Y:          ratingToSVGY(entry.rating),
+			Rating:     entry.rating,
 			Date:       t.Format("Mon 02 Jan"),
+			Comment:    entry.comment,
 			HasJourney: journeyDateSet[isoDate],
 		})
 	}
@@ -574,6 +590,7 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 		TimeLabels:       timeLabels,
 		TotalCommutes:    len(points),
 		AvgDuration:      avgDuration,
+		ShortestCommute:  shortestCommute,
 		LongestCommute:   longestCommute,
 		SVGWidth:         svgWidth,
 		SVGHeight:        svgChartHeight,

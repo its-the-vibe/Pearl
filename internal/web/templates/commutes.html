@@ -295,7 +295,7 @@
                         fill="#e3b341"
                         stroke="#0d1117"
                         stroke-width="1">
-                    <title>{{.Date}}&#10;Rating: {{.Rating}}</title>
+                    <title>{{.Date}}&#10;Rating: {{.Rating}}{{if .Comment}}&#10;{{.Comment}}{{end}}</title>
                 </circle>
                 {{end}}
                 </g>
@@ -316,6 +316,10 @@
         <div class="stat">
             <span class="stat-value">{{.AvgDuration}}</span>
             <span class="stat-label">Average duration</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">{{.ShortestCommute}}</span>
+            <span class="stat-label">Shortest commute</span>
         </div>
         <div class="stat">
             <span class="stat-value">{{.LongestCommute}}</span>

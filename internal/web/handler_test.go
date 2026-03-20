@@ -173,6 +173,9 @@ func TestBuildCommuteData_Empty(t *testing.T) {
 	if data.AvgDuration != "–" {
 		t.Errorf("expected '–' avg duration, got %q", data.AvgDuration)
 	}
+	if data.ShortestCommute != "–" {
+		t.Errorf("expected '–' shortest commute, got %q", data.ShortestCommute)
+	}
 	if data.LongestCommute != "–" {
 		t.Errorf("expected '–' longest commute, got %q", data.LongestCommute)
 	}
@@ -249,6 +252,9 @@ func TestBuildCommuteData_ComputesDuration(t *testing.T) {
 	// Average = (45 + 90) / 2 = 67m → "1h 7m"
 	if data.AvgDuration != "1h 7m" {
 		t.Errorf("AvgDuration = %q, want %q", data.AvgDuration, "1h 7m")
+	}
+	if data.ShortestCommute != "45m" {
+		t.Errorf("ShortestCommute = %q, want %q", data.ShortestCommute, "45m")
 	}
 	if data.LongestCommute != "1h 30m" {
 		t.Errorf("LongestCommute = %q, want %q", data.LongestCommute, "1h 30m")
@@ -365,6 +371,55 @@ func TestBuildCommuteData_RatingsOverlay(t *testing.T) {
 	wantMid := svgPaddingTop + svgPlotHeight/2
 	if data.Ratings[1].Y != wantMid {
 		t.Errorf("rating=3 Y = %d, want %d (midpoint)", data.Ratings[1].Y, wantMid)
+	}
+}
+
+func TestBuildCommuteData_RatingComments(t *testing.T) {
+	tue, wed, _ := commuteWeekDates()
+
+	journeys := []bq.CommuteJourney{
+		{Date: tue.Format("2006-01-02"), StartTime: "08:00", EndTime: "09:00"},
+		{Date: wed.Format("2006-01-02"), StartTime: "08:30", EndTime: "09:30"},
+	}
+
+	ratings := []bq.DailyRating{
+		{Date: tue, Rating: 5, Comment: "Great day!"},
+		{Date: wed, Rating: 2, Comment: ""},
+	}
+
+	data := buildCommuteData(journeys, ratings, 0)
+
+	if len(data.Ratings) != 2 {
+		t.Fatalf("expected 2 rating points, got %d", len(data.Ratings))
+	}
+
+	// Tuesday rating has a non-empty comment.
+	if data.Ratings[0].Comment != "Great day!" {
+		t.Errorf("Ratings[0].Comment = %q, want %q", data.Ratings[0].Comment, "Great day!")
+	}
+
+	// Wednesday rating has an empty comment.
+	if data.Ratings[1].Comment != "" {
+		t.Errorf("Ratings[1].Comment = %q, want empty string", data.Ratings[1].Comment)
+	}
+}
+
+func TestBuildCommuteData_ShortestCommute(t *testing.T) {
+	_, _, thu := commuteWeekDates()
+
+	journeys := []bq.CommuteJourney{
+		{Date: thu.Format("2006-01-02"), StartTime: "08:00", EndTime: "08:30"}, // 30m
+		{Date: thu.Format("2006-01-02"), StartTime: "07:30", EndTime: "09:00"}, // 90m
+		{Date: thu.Format("2006-01-02"), StartTime: "09:00", EndTime: "10:00"}, // 60m
+	}
+
+	data := buildCommuteData(journeys, nil, 0)
+
+	if data.ShortestCommute != "30m" {
+		t.Errorf("ShortestCommute = %q, want %q", data.ShortestCommute, "30m")
+	}
+	if data.LongestCommute != "1h 30m" {
+		t.Errorf("LongestCommute = %q, want %q", data.LongestCommute, "1h 30m")
 	}
 }
 

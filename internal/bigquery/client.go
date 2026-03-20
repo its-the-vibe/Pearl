@@ -40,10 +40,12 @@ type CommuteJourney struct {
 	EndTime   string
 }
 
-// DailyRating holds a date and its rating value fetched from the ratings table.
+// DailyRating holds a date, its rating value, and an optional comment fetched
+// from the ratings table.
 type DailyRating struct {
-	Date   time.Time
-	Rating float64
+	Date    time.Time
+	Rating  float64
+	Comment string // empty when the comment field is NULL in the database
 }
 
 // Client wraps a BigQuery client for querying Pearl data.
@@ -161,7 +163,7 @@ func (c *Client) Ratings(ctx context.Context) ([]DailyRating, error) {
 	}
 
 	query := fmt.Sprintf(
-		"SELECT CAST(DATE(timestamp) AS STRING) AS day, rating FROM `%s.%s.ratings` ORDER BY 1",
+		"SELECT CAST(DATE(timestamp) AS STRING) AS day, rating, comment FROM `%s.%s.ratings` ORDER BY 1",
 		c.project, c.ratingsDataset,
 	)
 
@@ -172,8 +174,9 @@ func (c *Client) Ratings(ctx context.Context) ([]DailyRating, error) {
 	}
 
 	type row struct {
-		Day    string `bigquery:"day"`
-		Rating int64  `bigquery:"rating"`
+		Day     string               `bigquery:"day"`
+		Rating  int64                `bigquery:"rating"`
+		Comment bigquery.NullString  `bigquery:"comment"`
 	}
 
 	var ratings []DailyRating
@@ -191,7 +194,11 @@ func (c *Client) Ratings(ctx context.Context) ([]DailyRating, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parsing ratings date %q: %w", r.Day, err)
 		}
-		ratings = append(ratings, DailyRating{Date: t, Rating: float64(r.Rating)})
+		comment := ""
+		if r.Comment.Valid {
+			comment = r.Comment.StringVal
+		}
+		ratings = append(ratings, DailyRating{Date: t, Rating: float64(r.Rating), Comment: comment})
 	}
 
 	return ratings, nil
