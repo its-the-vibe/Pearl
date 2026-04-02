@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	bq "github.com/its-the-vibe/pearl/internal/bigquery"
@@ -98,6 +99,7 @@ type CommuteData struct {
 	LabelY           int // y for x-axis text labels
 	Ratings          []RatingPoint
 	RatingLabels     []RatingLabel
+	RatingPath       string // SVG cubic-bezier path for the smooth ratings line
 	HasRatings       bool
 	DateRangeOptions []DateRangeOption
 }
@@ -379,6 +381,51 @@ func ratingToSVGY(rating float64) int {
 	return svgPaddingTop + int((5.0-rating)/4.0*float64(svgPlotHeight))
 }
 
+// smoothRatingPath converts a slice of rating points into an SVG cubic-bezier
+// path string that produces a smooth curve through all the data points using
+// the Catmull-Rom → cubic Bézier conversion.
+// Returns an empty string when fewer than 2 points are provided.
+func smoothRatingPath(pts []RatingPoint) string {
+	if len(pts) < 2 {
+		return ""
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "M %d,%d", pts[0].X, pts[0].Y)
+
+	for i := 1; i < len(pts); i++ {
+		prev := pts[i-1]
+		curr := pts[i]
+
+		// Control point 1: tangent at pts[i-1].
+		var cp1x, cp1y float64
+		if i == 1 {
+			cp1x = float64(prev.X) + float64(curr.X-prev.X)/3.0
+			cp1y = float64(prev.Y) + float64(curr.Y-prev.Y)/3.0
+		} else {
+			pp := pts[i-2]
+			cp1x = float64(prev.X) + float64(curr.X-pp.X)/6.0
+			cp1y = float64(prev.Y) + float64(curr.Y-pp.Y)/6.0
+		}
+
+		// Control point 2: tangent at pts[i].
+		var cp2x, cp2y float64
+		if i == len(pts)-1 {
+			cp2x = float64(curr.X) - float64(curr.X-prev.X)/3.0
+			cp2y = float64(curr.Y) - float64(curr.Y-prev.Y)/3.0
+		} else {
+			next := pts[i+1]
+			cp2x = float64(curr.X) - float64(next.X-prev.X)/6.0
+			cp2y = float64(curr.Y) - float64(next.Y-prev.Y)/6.0
+		}
+
+		fmt.Fprintf(&sb, " C %.1f,%.1f %.1f,%.1f %d,%d",
+			cp1x, cp1y, cp2x, cp2y, curr.X, curr.Y)
+	}
+
+	return sb.String()
+}
+
 // buildCommuteData filters journeys to commute candidates (Tue/Wed/Thu,
 // 7:00–10:30 start time) and computes all values needed by the template.
 // ratings is optional; pass nil to omit the ratings overlay.
@@ -601,6 +648,7 @@ func buildCommuteData(journeys []bq.CommuteJourney, ratings []bq.DailyRating, da
 		LabelY:           chartBottom + 15,
 		Ratings:          ratingPoints,
 		RatingLabels:     ratingLabels,
+		RatingPath:       smoothRatingPath(ratingPoints),
 		HasRatings:       len(ratingPoints) > 0,
 		DateRangeOptions: buildDateRangeOptions(days),
 	}

@@ -281,12 +281,11 @@
 
                 <!-- Ratings overlay: connecting line -->
                 {{if gt (len .Ratings) 1}}
-                <polyline
-                    points="{{range .Ratings}}{{.X}},{{.Y}} {{end}}"
+                <path
+                    d="{{.RatingPath}}"
                     fill="none"
                     stroke="#e3b341"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"/>
+                    stroke-width="1.5"/>
                 {{end}}
 
                 <!-- Ratings overlay: data points -->

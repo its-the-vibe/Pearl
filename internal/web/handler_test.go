@@ -1,6 +1,7 @@
 package web
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -523,6 +524,55 @@ func TestBuildCommuteData_RatingLabels(t *testing.T) {
 			t.Errorf("RatingLabels[%d].Y (%d) should be greater than RatingLabels[%d].Y (%d)",
 				i, data.RatingLabels[i].Y, i-1, data.RatingLabels[i-1].Y)
 		}
+	}
+}
+
+// ---- Smooth rating path tests ----
+
+func TestSmoothRatingPath_Empty(t *testing.T) {
+	if got := smoothRatingPath(nil); got != "" {
+		t.Errorf("smoothRatingPath(nil) = %q, want empty string", got)
+	}
+	if got := smoothRatingPath([]RatingPoint{{X: 85, Y: 20}}); got != "" {
+		t.Errorf("smoothRatingPath(single point) = %q, want empty string", got)
+	}
+}
+
+func TestSmoothRatingPath_TwoPoints(t *testing.T) {
+	pts := []RatingPoint{
+		{X: 85, Y: 20},
+		{X: 135, Y: 145},
+	}
+	path := smoothRatingPath(pts)
+	if path == "" {
+		t.Fatal("smoothRatingPath returned empty string for 2 points")
+	}
+	// Must start with a Move command anchored at the first point.
+	wantPrefix := "M 85,20"
+	if len(path) < len(wantPrefix) || path[:len(wantPrefix)] != wantPrefix {
+		t.Errorf("path = %q, want prefix %q", path, wantPrefix)
+	}
+	// Must contain a cubic bezier command.
+	if !strings.Contains(path, " C ") {
+		t.Errorf("path = %q, expected a cubic bezier 'C' command", path)
+	}
+}
+
+func TestSmoothRatingPath_MultiplePoints(t *testing.T) {
+	pts := []RatingPoint{
+		{X: 85, Y: 20},
+		{X: 135, Y: 145},
+		{X: 185, Y: 83},
+		{X: 235, Y: 208},
+	}
+	path := smoothRatingPath(pts)
+	if path == "" {
+		t.Fatal("smoothRatingPath returned empty string for 4 points")
+	}
+	// Should contain exactly 3 cubic bezier segments (one per inter-point gap).
+	count := strings.Count(path, " C ")
+	if count != 3 {
+		t.Errorf("expected 3 cubic bezier segments, got %d in path %q", count, path)
 	}
 }
 
