@@ -3,7 +3,7 @@ module github.com/its-the-vibe/pearl
 go 1.26.6
 
 require (
-	cloud.google.com/go/bigquery v1.79.1
+	cloud.google.com/go/bigquery v1.80.0
 	google.golang.org/api v0.293.0
 	gopkg.in/yaml.v3 v3.0.1
 )
