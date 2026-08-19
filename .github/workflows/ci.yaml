@@ -10,5 +10,5 @@ jobs:
   call-common-ci:
     uses: its-the-vibe/.github/.github/workflows/common-ci.yaml@main
     permissions:
-      contents: read
+      contents: write
       packages: write
