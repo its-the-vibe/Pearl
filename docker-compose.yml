@@ -1,7 +1,8 @@
 services:
   pearl:
     build: .
-    image: pearl:latest
+    image: ghcr.io/its-the-vibe/pearl:latest
+    pull_policy: always
     read_only: true
     ports:
       - "${PORT:-8080}:8080"
