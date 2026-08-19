@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # Build stage
-FROM golang:1.26.6 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -10,15 +13,16 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o /pearl ./cmd/pearl
 
-# Runtime stage – minimal scratch image
-FROM scratch
+# Runtime stage (distroless)
+FROM gcr.io/distroless/static-debian13:nonroot
 
 COPY --from=builder /pearl /pearl
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 EXPOSE 8080
+
+USER nonroot:nonroot
 
 ENTRYPOINT ["/pearl"]

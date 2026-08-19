@@ -1,8 +1,10 @@
 services:
   pearl:
     build: .
-    image: pearl:latest
+    image: ghcr.io/its-the-vibe/pearl:latest
+    pull_policy: always
     read_only: true
+    user: "${UID:-65532}:${GID:-65532}"
     ports:
       - "${PORT:-8080}:8080"
     volumes:
