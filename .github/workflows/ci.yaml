@@ -10,5 +10,6 @@ jobs:
   call-common-ci:
     uses: its-the-vibe/.github/.github/workflows/common-ci.yaml@main
     permissions:
-      contents: write
+      contents: read
       packages: write
+    secrets: inherit
