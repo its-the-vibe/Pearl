@@ -1,6 +1,6 @@
 module github.com/its-the-vibe/pearl
 
-go 1.27.1
+go 1.27.2
 
 require (
 	cloud.google.com/go/bigquery v1.85.0
