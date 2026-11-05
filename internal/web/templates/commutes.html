@@ -168,6 +168,25 @@
             background: #161b22;
             border-color: #58a6ff;
         }
+
+        .chart-tooltip {
+            position: absolute;
+            display: none;
+            z-index: 10;
+            background: #0d1117;
+            color: #e6edf3;
+            border: 1px solid #58a6ff;
+            border-radius: 6px;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            white-space: pre-line;
+            max-width: 240px;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        .chart-scroll svg [data-tip] { cursor: pointer; }
     </style>
 </head>
 <body>
@@ -326,7 +345,47 @@
         </div>
     </div>
 
+    <div id="chart-tooltip" class="chart-tooltip" role="tooltip"></div>
+
     <script>
+        (function() {
+            var tooltip = document.getElementById('chart-tooltip');
+            var current = null;
+            function hide() {
+                tooltip.style.display = 'none';
+                current = null;
+            }
+            function show(el, text) {
+                tooltip.textContent = text;
+                tooltip.style.display = 'block';
+                var r = el.getBoundingClientRect();
+                var w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+                var left = r.left + r.width / 2 - w / 2;
+                left = Math.max(4, Math.min(left, document.documentElement.clientWidth - w - 4));
+                var top = r.top - h - 8;
+                if (top < 4) top = r.bottom + 8;
+                tooltip.style.left = (left + window.pageXOffset) + 'px';
+                tooltip.style.top = (top + window.pageYOffset) + 'px';
+                current = el;
+            }
+            document.querySelectorAll('.chart-scroll svg rect, .chart-scroll svg circle').forEach(function(el) {
+                var title = el.querySelector('title');
+                if (!title) return;
+                el.setAttribute('data-tip', '');
+                el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (current === el) { hide(); return; }
+                    show(el, title.textContent);
+                });
+            });
+            document.addEventListener('click', hide);
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape') hide(); });
+            window.addEventListener('resize', hide);
+            var scroller = document.querySelector('.chart-scroll');
+            if (scroller) scroller.addEventListener('scroll', hide);
+            document.querySelectorAll('.legend-item').forEach(function(i) { i.addEventListener('click', hide); });
+        })();
+
         document.querySelectorAll('.legend-item[data-series]').forEach(function(item) {
             function toggle() {
                 var seriesId = item.getAttribute('data-series');
