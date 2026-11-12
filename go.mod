@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	cloud.google.com/go/bigquery v1.86.2
-	google.golang.org/api v0.313.0
+	google.golang.org/api v0.314.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
